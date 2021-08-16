@@ -1,0 +1,5 @@
+Resources:
+  ImageProcessingQueue: # Queue with messages about images to be watermarked
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: ${self:custom.imageProcessingQueue}

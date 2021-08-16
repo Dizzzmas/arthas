@@ -1,0 +1,49 @@
+Resources:
+  # Buckets
+  SourceWatermarkBucket: # Bucket with unprocessed images
+    Type: AWS::S3::Bucket
+    DependsOn:
+      - ImageProcessingQueuePolicy
+    Properties:
+      BucketName: ${self:custom.sourceWatermarkBucket}
+      NotificationConfiguration:
+        QueueConfigurations:
+          - Event: 's3:ObjectCreated:*'
+            Queue: !GetAtt ImageProcessingQueue.Arn
+            Filter:
+              S3Key:
+                Rules:
+                  - Name: suffix
+                    Value: '.jpg'
+
+  DestinationWatermarkBucket: # Bucket with processed images
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: ${self:custom.destinationWatermarkBucket}
+
+  # Policies
+  ImageProcessingQueuePolicy: # Allow S3 to send messages to SQS
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      PolicyDocument:
+        Version: '2012-10-17'
+        Id: QueuePolicy
+        Statement:
+          - Sid: ${self:custom.imageProcessingQueuePolicy}
+            Effect: Allow
+            Principal:
+              Service: 's3.amazonaws.com'
+            Action:
+              - 'sqs:SendMessage'
+            Resource: !GetAtt ImageProcessingQueue.Arn
+            Condition:
+              ArnLike:
+                aws:SourceArn:
+                  !Join [
+                    '',
+                    ['arn:aws:s3:::', '${self:custom.sourceWatermarkBucket}'],
+                  ]
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+      Queues:
+        - Ref: ImageProcessingQueue

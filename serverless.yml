@@ -1,0 +1,56 @@
+org: dizzzmas
+app: arthas
+service: arthas
+
+plugins:
+  - 'serverless-plugin-typescript'
+  - serverless-plugin-optimize
+  - serverless-offline
+
+provider:
+  name: aws
+  runtime: nodejs12.x
+  stage: ${opt:stage, 'dev'}
+  region: ${opt:region, 'eu-west-1'}
+
+custom:
+  stackName: ${self:service}-${self:provider.stage}
+  imageProcessingQueue: '${self:custom.stackName}-ImageProcessingQueue'
+  imageProcessingQueuePolicy: '${self:custom.stackName}-Allow-SendMessage-To-Queue-From-S3-Event-Notification'
+  sourceWatermarkBucket: '${self:custom.stackName}-source-watermark-bucket'
+  destinationWatermarkBucket: '${self:custom.stackName}-destination-watermark-bucket'
+
+environment:
+  STAGE: ${self:provider.stage}
+  REGION: ${self:provider.region}
+  IMAGE_PROCESSING_QUEUE_URL: { Ref: ImageProcessingQueue }
+
+iamRoleStatements:
+  - Effect: Allow
+    Action:
+      - sqs:ReceiveMessage
+      - sqs:DeleteMessage
+      - sqs:GetQueueAttributes
+      - sqs:GetQueueUrl
+    Resource:
+      - arn:aws:sqs:#{AWS::Region}:#{AWS::AccountId}:${self.custom.stackName}-ImageProcessingQueue
+
+functions:
+  main:
+    handler: src/lambda.handler
+    events:
+      - http: ANY /
+      - http: 'ANY {proxy+}'
+
+  watermark:
+    handler: src/watermark.handler
+    events:
+      - sqs:
+          arn:
+            Fn::GetAtt:
+              - ImageProcessingQueue
+              - Arn
+
+resources:
+  - ${file(cloudformation/sqs.yml)}
+  - ${file(cloudformation/s3.yml)}
